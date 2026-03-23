@@ -13,6 +13,7 @@ import threading
 import queue
 import sys
 import os
+import time
 
 # Initialize pygame
 pygame.init()
@@ -33,10 +34,11 @@ class Character:
         self.y = y
         self.radius = radius
         self.angle = 0  # Current facing angle in degrees
+        self.current_movement = None  # Stores ongoing movement data
     
-    def move(self, direction_degrees, speed, length_seconds):
+    def start_move(self, direction_degrees, speed, length_seconds):
         """
-        Move the character in a given direction.
+        Start an animated movement in a given direction.
         
         Args:
             direction_degrees: Direction in degrees (0 = right, 90 = up, 180 = left, 270 = down)
@@ -46,20 +48,45 @@ class Character:
         # Convert degrees to radians (pygame y-axis is inverted, so we negate)
         rad = math.radians(-direction_degrees)
         
-        # Calculate displacement
-        dx = speed * length_seconds * math.cos(rad)
-        dy = speed * length_seconds * math.sin(rad)
+        # Calculate velocity components
+        vx = speed * math.cos(rad)
+        vy = speed * math.sin(rad)
+        
+        # Store movement data for animation
+        self.current_movement = {
+            'vx': vx,
+            'vy': vy,
+            'start_time': time.time(),
+            'duration': length_seconds,
+            'direction': direction_degrees
+        }
+        
+        # Update facing angle immediately
+        self.angle = direction_degrees
+    
+    def update(self):
+        """Update character position based on ongoing movement (call every frame)"""
+        if self.current_movement is None:
+            return
+        
+        current_time = time.time()
+        elapsed = current_time - self.current_movement['start_time']
+        
+        if elapsed >= self.current_movement['duration']:
+            # Movement complete
+            self.current_movement = None
+            return
+        
+        # Calculate delta time since last frame
+        dt = 1.0 / FPS  # Approximate frame time
         
         # Update position
-        self.x += dx
-        self.y += dy
+        self.x += self.current_movement['vx'] * dt
+        self.y += self.current_movement['vy'] * dt
         
         # Keep character within bounds
         self.x = max(self.radius, min(WINDOW_WIDTH - self.radius, self.x))
         self.y = max(self.radius, min(WINDOW_HEIGHT - self.radius, self.y))
-        
-        # Update facing angle
-        self.angle = direction_degrees
     
     def draw(self, surface):
         """Draw the character as a red dot"""
@@ -148,7 +175,7 @@ class GameApp:
         self.font = pygame.font.Font(None, 36)
     
     def handle_events(self):
-        """Handle pygame events"""
+        """Handle pygame events - non-blocking to prevent freezing"""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
@@ -166,8 +193,8 @@ class GameApp:
                 cmd = self.command_queue.get_nowait()
                 if cmd[0] == 'move':
                     direction, speed, length = cmd[1:]
-                    self.character.move(direction, speed, length)
-                    print(f"Moved: direction={direction}°, speed={speed}, length={length}s")
+                    self.character.start_move(direction, speed, length)
+                    print(f"Started movement: direction={direction}°, speed={speed}, length={length}s")
                 elif cmd[0] == 'switch_bg':
                     self.bg_manager.switch_background(cmd[1] if len(cmd) > 1 else None)
                     print(f"Switched background")
@@ -202,6 +229,7 @@ class GameApp:
         while self.running:
             self.handle_events()
             self.process_commands()
+            self.character.update()  # Update character position for smooth animation
             self.draw()
             self.clock.tick(FPS)
         
