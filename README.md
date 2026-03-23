@@ -6,6 +6,8 @@ A Python/pygame-based application that provides a visual top-down 2D RPG-style i
 
 - **Visual Display**: Shows a red dot representing a character on a switchable background
 - **Multiple Backgrounds**: Comes with 5 built-in colored backgrounds (grass, dirt, water, stone, sand)
+- **Smooth Animation**: Character moves smoothly with frame-by-frame animation instead of teleporting
+- **Responsive UI**: Visual window remains responsive and won't freeze when interacted with
 - **Terminal Control**: Control the character using a simple `move(direction, speed, length)` function
 - **Keyboard Shortcuts**: 
   - Press `B` to switch backgrounds in the visual window
@@ -62,17 +64,33 @@ quit     # Exit the application
 
 The application runs two threads:
 1. **Visual Thread**: Handles the pygame display, rendering the character and background
+   - Runs at 60 FPS for smooth animation
+   - Updates character position every frame during movement
+   - Non-blocking event handling prevents freezing
 2. **Terminal Thread**: Accepts user commands and sends them to the visual thread via a queue
 
 Commands entered in the terminal are processed and executed in the visual window, providing immediate feedback.
 
+## Movement System
+
+The character movement is now animated smoothly:
+- When you issue a `move()` command, the character starts moving immediately
+- Movement happens gradually over the specified duration at 60 FPS
+- The character maintains velocity throughout the movement duration
+- Direction indicator (white line) shows which way the character is facing
+
 ## Project Structure
 
 - `rpg_controller.py` - Main application file containing:
-  - `Character` class - Represents the player character
+  - `Character` class - Represents the player character with smooth movement
   - `BackgroundManager` class - Manages background images
   - `GameApp` class - Main game loop and rendering
   - `terminal_interface()` - Command-line interface
+
+## Recent Fixes
+
+- ✅ Fixed window freezing issue - now handles events properly without blocking
+- ✅ Fixed teleportation issue - character now animates smoothly during movement
 
 ## Future Enhancements
 
