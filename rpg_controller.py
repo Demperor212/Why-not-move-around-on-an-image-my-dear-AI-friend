@@ -185,6 +185,13 @@ class GameApp:
                 elif event.key == pygame.K_b:
                     # Switch background with 'b' key
                     self.bg_manager.switch_background()
+            # Explicitly handle window events to prevent freezing when moving/resizing
+            elif event.type == pygame.WINDOWEVENT:
+                # Window moved, resized, etc. - just continue processing
+                pass
+            elif event.type == pygame.ACTIVEEVENT:
+                # Window focus changed - just continue processing
+                pass
     
     def process_commands(self):
         """Process commands from the terminal thread"""
