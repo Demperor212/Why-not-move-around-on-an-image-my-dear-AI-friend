@@ -9,11 +9,11 @@ A pygame-based application with:
 
 import pygame
 import math
-import threading
-import queue
 import sys
 import os
 import time
+import threading
+import queue
 
 # Initialize pygame
 pygame.init()
@@ -64,21 +64,17 @@ class Character:
         # Update facing angle immediately
         self.angle = direction_degrees
     
-    def update(self):
+    def update(self, dt):
         """Update character position based on ongoing movement (call every frame)"""
         if self.current_movement is None:
             return
         
-        current_time = time.time()
-        elapsed = current_time - self.current_movement['start_time']
+        elapsed = time.time() - self.current_movement['start_time']
         
         if elapsed >= self.current_movement['duration']:
             # Movement complete
             self.current_movement = None
             return
-        
-        # Calculate delta time since last frame
-        dt = 1.0 / FPS  # Approximate frame time
         
         # Update position
         self.x += self.current_movement['vx'] * dt
@@ -175,7 +171,7 @@ class GameApp:
         self.font = pygame.font.Font(None, 36)
     
     def handle_events(self):
-        """Handle pygame events - non-blocking to prevent freezing"""
+        """Handle pygame events - critical for window responsiveness"""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.running = False
@@ -185,18 +181,11 @@ class GameApp:
                 elif event.key == pygame.K_b:
                     # Switch background with 'b' key
                     self.bg_manager.switch_background()
-            # Explicitly handle window events to prevent freezing when moving/resizing
-            elif event.type == pygame.WINDOWEVENT:
-                # Window moved, resized, etc. - just continue processing
-                pass
-            elif event.type == pygame.ACTIVEEVENT:
-                # Window focus changed - just continue processing
-                pass
     
     def process_commands(self):
-        """Process commands from the terminal thread"""
-        try:
-            while True:
+        """Process commands from the terminal thread - non-blocking"""
+        while not self.command_queue.empty():
+            try:
                 cmd = self.command_queue.get_nowait()
                 if cmd[0] == 'move':
                     direction, speed, length = cmd[1:]
@@ -207,8 +196,8 @@ class GameApp:
                     print(f"Switched background")
                 elif cmd[0] == 'quit':
                     self.running = False
-        except queue.Empty:
-            pass
+            except queue.Empty:
+                break
     
     def draw(self):
         """Render the game"""
@@ -231,24 +220,43 @@ class GameApp:
         
         pygame.display.flip()
     
-    def run_visual(self):
-        """Run the visual part of the application"""
+    def run(self):
+        """Run the main game loop - MUST be called from main thread for pygame"""
+        last_time = time.time()
+        
         while self.running:
+            # Calculate delta time
+            current_time = time.time()
+            dt = current_time - last_time
+            last_time = current_time
+            
+            # Cap dt to prevent huge jumps
+            dt = min(dt, 0.1)
+            
+            # Handle pygame events (CRITICAL - keeps window responsive)
             self.handle_events()
+            
+            # Process any pending commands from terminal
             self.process_commands()
-            self.character.update()  # Update character position for smooth animation
+            
+            # Update character
+            self.character.update(dt)
+            
+            # Draw everything
             self.draw()
+            
+            # Maintain FPS
             self.clock.tick(FPS)
         
         pygame.quit()
     
     def send_command(self, command):
-        """Send a command to the visual thread"""
+        """Send a command from terminal thread to game thread"""
         self.command_queue.put(command)
 
 
 def terminal_interface(app):
-    """Terminal interface for controlling the character"""
+    """Terminal interface for controlling the character - runs in separate thread"""
     
     print("=" * 50)
     print("2D RPG Character Controller - Terminal Interface")
@@ -332,21 +340,25 @@ def terminal_interface(app):
 def main():
     """Main entry point"""
     print("Starting 2D RPG Character Controller...")
+    print("Game window will open. Use terminal to enter commands.")
+    print("Press ESC in game window or type 'quit' to exit.\n")
     
     # Create the game application
     app = GameApp()
     
-    # Start visual thread
-    visual_thread = threading.Thread(target=app.run_visual)
-    visual_thread.daemon = True
-    visual_thread.start()
+    # Start terminal thread (non-blocking to main game)
+    terminal_thread = threading.Thread(target=terminal_interface, args=(app,))
+    terminal_thread.daemon = True
+    terminal_thread.start()
     
-    # Run terminal interface in main thread
+    # Run the game loop in main thread (required by pygame)
     try:
-        terminal_interface(app)
-    finally:
-        # Wait for visual thread to finish
-        visual_thread.join(timeout=2)
+        app.run()
+    except KeyboardInterrupt:
+        print("\nInterrupted!")
+    
+    # Wait for terminal thread to finish
+    terminal_thread.join(timeout=2)
     
     print("Application closed.")
 
